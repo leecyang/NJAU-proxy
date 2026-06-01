@@ -1,0 +1,17 @@
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "njau-proxy-example",
+  "main": "src/index.js",
+  "compatibility_date": "2026-06-01",
+  "compatibility_flags": ["nodejs_compat"],
+  "vars": {
+    "PROXY_ENDPOINT": "https://proxy.example.com"
+  },
+  "secrets": {
+    "required": ["PROXY_TOKEN"]
+  },
+  "observability": {
+    "enabled": true,
+    "head_sampling_rate": 1
+  }
+}
