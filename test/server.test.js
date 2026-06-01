@@ -334,6 +334,23 @@ test("shares one timeout budget across redirects", async () => {
   assert.ok(requests[1].timeoutMs < requests[0].timeoutMs);
 });
 
+test("applies the timeout budget to DNS resolution", async () => {
+  await assert.rejects(
+    () =>
+      proxyFetch(
+        {
+          url: "https://allowed.example/start",
+          timeoutMs: 20,
+        },
+        makeConfig(),
+        {
+          resolveHostname: async () => new Promise(() => {}),
+        },
+      ),
+    { code: "UPSTREAM_TIMEOUT" },
+  );
+});
+
 test("returns a uniform error for oversized upstream responses", async (t) => {
   const app = await createApp({
     sendRequest: async () => {

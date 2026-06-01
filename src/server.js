@@ -376,6 +376,29 @@ function isRedirect(response) {
   return REDIRECT_STATUSES.has(response.statusCode) && response.headers.location;
 }
 
+function upstreamTimeoutError() {
+  return new ProxyError("UPSTREAM_TIMEOUT", "Upstream request timed out", 504);
+}
+
+async function withDeadline(promise, deadline) {
+  const remainingTimeoutMs = deadline - Date.now();
+  if (remainingTimeoutMs <= 0) {
+    throw upstreamTimeoutError();
+  }
+
+  let timer;
+  try {
+    return await Promise.race([
+      promise,
+      new Promise((_, reject) => {
+        timer = setTimeout(() => reject(upstreamTimeoutError()), remainingTimeoutMs);
+      }),
+    ]);
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 function redirectedRequest(previous, statusCode, nextUrl) {
   const headers = { ...previous.headers };
   let method = previous.method;
@@ -408,22 +431,24 @@ export async function proxyFetch(
   const deadline = Date.now() + request.timeoutMs;
 
   for (let redirectCount = 0; ; redirectCount += 1) {
+    const { url, addresses } = await withDeadline(
+      validateTargetUrl(request.url, config, resolveHostname),
+      deadline,
+    );
     const remainingTimeoutMs = deadline - Date.now();
     if (remainingTimeoutMs <= 0) {
-      throw new ProxyError("UPSTREAM_TIMEOUT", "Upstream request timed out", 504);
+      throw upstreamTimeoutError();
     }
-    const { url, addresses } = await validateTargetUrl(
-      request.url,
-      config,
-      resolveHostname,
+    const response = await withDeadline(
+      sendRequest({
+        ...request,
+        url,
+        addresses,
+        timeoutMs: remainingTimeoutMs,
+        maxResponseBytes: config.maxResponseBytes,
+      }),
+      deadline,
     );
-    const response = await sendRequest({
-      ...request,
-      url,
-      addresses,
-      timeoutMs: remainingTimeoutMs,
-      maxResponseBytes: config.maxResponseBytes,
-    });
 
     if (!isRedirect(response)) {
       return {

@@ -1,13 +1,34 @@
 services:
+  tailscale:
+    image: tailscale/tailscale:latest
+    container_name: njau-proxy-tailscale
+    hostname: ${TS_HOSTNAME:-njau-proxy}
+    restart: unless-stopped
+    environment:
+      TS_AUTHKEY: ${TS_AUTHKEY:?Set TS_AUTHKEY in .env}
+      TS_AUTH_ONCE: "true"
+      TS_STATE_DIR: /var/lib/tailscale
+      TS_USERSPACE: "false"
+    volumes:
+      - tailscale-state:/var/lib/tailscale
+      - /dev/net/tun:/dev/net/tun
+    cap_add:
+      - NET_ADMIN
+      - NET_RAW
+
   njau-proxy:
     build:
       context: .
       dockerfile: Dockerfile
     container_name: njau-proxy
-    network_mode: host
+    network_mode: service:tailscale
     restart: unless-stopped
+    depends_on:
+      - tailscale
     env_file:
       - .env
+    environment:
+      HOST: 0.0.0.0
     healthcheck:
       test:
         - CMD
@@ -18,3 +39,6 @@ services:
       timeout: 5s
       start_period: 10s
       retries: 3
+
+volumes:
+  tailscale-state:
